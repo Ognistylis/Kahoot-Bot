@@ -4,76 +4,64 @@ const app = express();
 
 app.use(express.json());
 
-// Tu trzymamy aktywne boty
 let activeClients = [];
+let globalRejoin = false; // Sterowane z Godota
 
-// --- 1. STARTOWANIE BOTÓW ---
 app.post('/atak', (req, res) => {
-    // Odbieramy dane z Godota (telefonu)
-    const { pin, name, count, autoAnswer, minDelay, maxDelay, joinDelay } = req.body;
+    const { pin, name, count, autoAnswer, minDelay, maxDelay, joinDelay, rejoin } = req.body;
     
-    console.log(`[ROZKAZ] PIN: ${pin}, Ilość: ${count}, Auto: ${autoAnswer}`);
+    console.log(`[ATAK] PIN: ${pin}, Rejoin: ${rejoin}`);
     
-    // Resetujemy starą armię
-    activeClients = [];
+    globalRejoin = rejoin; // Ustawiamy tryb niezniszczalności
+    activeClients = []; // Resetujemy listę (ale stare procesy zostaną nadpisane)
     
-    // Odpalamy funkcję tworzenia botów w tle
     spawnBots(pin, name, count, autoAnswer, minDelay, maxDelay, joinDelay);
-    
     res.send({ status: "Atak rozpoczęty!" });
 });
 
-// --- 2. OBSŁUGA 2FA (KOLORY) ---
 app.post('/2fa', (req, res) => {
-    const { code } = req.body; // np. "0123"
+    const { code } = req.body;
     const digitCode = code.split('').map(Number);
-    
-    console.log(`[2FA] Wysyłam kod: ${digitCode}`);
-    
-    // Wysyłamy kod do każdego aktywnego bota
     activeClients.forEach(client => {
-        try {
-            // Próbujemy 3 razy dla pewności
-            for(let i=0; i<3; i++) {
-                setTimeout(() => {
-                     client.answer2FA(digitCode);
-                }, i * 500);
-            }
-        } catch(e) {}
+        for(let i=0; i<3; i++) {
+            setTimeout(() => { client.answer2FA(digitCode).catch(()=>{}); }, i * 500);
+        }
     });
-    
     res.send({ status: "Kod wysłany" });
 });
 
 async function spawnBots(pin, baseName, count, autoAnswer, minD, maxD, joinD) {
     for (let i = 1; i <= count; i++) {
-        const client = new Kahoot();
         const nickname = `${baseName}_${i}`;
-        
-        // Czekamy tyle, ile ustawisz w Godocie (opcja "Join Delay")
+        createBot(pin, nickname, autoAnswer, minD, maxD, joinD);
         await new Promise(r => setTimeout(r, joinD || 60));
-
-        try {
-            client.join(pin, nickname).catch(() => {});
-            
-            // Konfiguracja odpowiadania
-            if (autoAnswer) {
-                client.on("QuestionStart", (q) => {
-                    const delay = Math.floor(Math.random() * ((maxD || 1000) - (minD || 0) + 1)) + (minD || 0);
-                    setTimeout(() => {
-                        const ans = Math.floor(Math.random() * 4);
-                        q.answer(ans).catch(()=>{});
-                    }, delay);
-                });
-            }
-            activeClients.push(client);
-        } catch(e) {}
     }
-    console.log(`[INFO] Wysłano ${count} botów.`);
 }
 
-// Uruchomienie serwera
-app.listen(3000, () => {
-    console.log("SERWER DZIAŁA! Skopiuj link z okna Webview.");
+function createBot(pin, nickname, autoAnswer, minD, maxD, joinD) {
+    const client = new Kahoot();
 
-});
+    client.join(pin, nickname).catch(() => {});
+
+    client.on("Disconnect", (reason) => {
+        if (globalRejoin) {
+            console.log(`[REJOIN] Bot ${nickname} wyrzucony. Wraca za 1s...`);
+            setTimeout(() => {
+                createBot(pin, nickname, autoAnswer, minD, maxD, joinD);
+            }, 1000);
+        }
+    });
+
+    if (autoAnswer) {
+        client.on("QuestionStart", (q) => {
+            const delay = Math.floor(Math.random() * (maxD - minD + 1)) + minD;
+            setTimeout(() => {
+                q.answer(Math.floor(Math.random() * 4)).catch(()=>{});
+            }, delay);
+        });
+    }
+    activeClients.push(client);
+}
+
+const port = process.env.PORT || 3000;
+app.listen(port, () => { console.log(`Serwer na porcie ${port}`); });

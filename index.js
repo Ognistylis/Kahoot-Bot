@@ -44,14 +44,27 @@ async function spawnBots(pin, baseName, count, autoAnswer, minD, maxD, joinD) {
 function createBot(pin, nickname, autoAnswer, minD, maxD, joinD) {
     const client = new Kahoot();
 
-    client.join(pin, nickname).catch(() => {});
+    // Próba dołączenia
+    client.join(pin, nickname).catch((err) => {
+        console.log(`[BŁĄD] Bot ${nickname} nie mógł dołączyć: ${err.description || err}`);
+        
+        // Jeśli nick jest zajęty, spróbuj wejść z lekko zmienionym nickiem po 2 sekundach
+        if (globalRejoin) {
+            setTimeout(() => {
+                createBot(pin, nickname + "x", autoAnswer, minD, maxD, joinD);
+            }, 2000);
+        }
+    });
 
     client.on("Disconnect", (reason) => {
         if (globalRejoin) {
-            console.log(`[REJOIN] Bot ${nickname} wyrzucony. Wraca za 1s...`);
+            console.log(`[REJOIN] Bot ${nickname} wyrzucony (${reason}). Wraca jako ${nickname}x...`);
+            
+            // Czekamy 2 sekundy przed powrotem (ważne, żeby Kahoot "odparował")
             setTimeout(() => {
-                createBot(pin, nickname, autoAnswer, minD, maxD, joinD);
-            }, 1000);
+                // Dodajemy "x" do nazwy, żeby Kahoot nie pluł się o zajęty nick
+                createBot(pin, nickname + "x", autoAnswer, minD, maxD, joinD);
+            }, 2000);
         }
     });
 
@@ -66,6 +79,18 @@ function createBot(pin, nickname, autoAnswer, minD, maxD, joinD) {
     activeClients.push(client);
 }
 
+    if (autoAnswer) {
+        client.on("QuestionStart", (q) => {
+            const delay = Math.floor(Math.random() * (maxD - minD + 1)) + minD;
+            setTimeout(() => {
+                q.answer(Math.floor(Math.random() * 4)).catch(()=>{});
+            }, delay);
+        });
+    }
+    activeClients.push(client);
+}
+
 const port = process.env.PORT || 3000;
 app.listen(port, () => { console.log(`Serwer na porcie ${port}`); });
+
 

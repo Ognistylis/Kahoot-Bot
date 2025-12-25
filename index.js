@@ -63,7 +63,7 @@ function createBot(pin, nickname, autoAnswer, minD, maxD, joinD) {
         if (globalRejoin) {
             console.log(`[REJOIN] Bot ${nickname} wyrzucony (${reason}). Wraca...`);
             setTimeout(() => {
-                createBot(pin, nickname + "x", autoAnswer, minD, maxD, joinD);
+                createBot(pin, nickname, autoAnswer, minD, maxD, joinD);
             }, 2500);
         }
     });
@@ -84,3 +84,4 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => { 
     console.log(`Serwer działa na porcie ${port}`); 
 });
+

@@ -3,6 +3,9 @@ const Kahoot = require("kahoot.js-latest");
 const app = express();
 
 app.use(express.json());
+app.get('/', (req, res) => {
+    res.send("OK");
+});
 
 let activeClients = [];
 let globalRejoin = false; // Sterowane z Godota
@@ -65,3 +68,4 @@ function createBot(pin, nickname, autoAnswer, minD, maxD, joinD) {
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => { console.log(`Serwer na porcie ${port}`); });
+

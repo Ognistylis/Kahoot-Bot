@@ -1,5 +1,5 @@
 const express = require('express');
-const Kahoot = require("kahoot.js-updated");
+const Kahoot = require("kahoot.js-latest");
 const app = express();
 
 app.use(express.json());
@@ -75,4 +75,5 @@ async function spawnBots(pin, baseName, count, autoAnswer, minD, maxD, joinD) {
 // Uruchomienie serwera
 app.listen(3000, () => {
     console.log("SERWER DZIAŁA! Skopiuj link z okna Webview.");
+
 });

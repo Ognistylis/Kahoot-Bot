@@ -4,7 +4,7 @@ const app = express();
 
 app.use(express.json());
 
-// Endpoint dla przycisku "Budź" w Godocie
+// Endpoint dla przycisku "Budź"
 app.get('/', (req, res) => {
     res.send("OK");
 });
@@ -14,14 +14,13 @@ let globalRejoin = false;
 
 // --- 1. STARTOWANIE BOTÓW ---
 app.post('/atak', (req, res) => {
-    const { pin, name, count, autoAnswer, minDelay, maxDelay, joinDelay, rejoin } = req.body;
-    
-    console.log(`[ATAK] PIN: ${pin}, Rejoin: ${rejoin}`);
+    const { pin, name, count, autoAnswer, minDelay, maxDelay, joinDelay, rejoin, smartAnswer } = req.body;
+    console.log(`[ATAK] PIN: ${pin}, Rejoin: ${rejoin}, Smart: ${smartAnswer}`);
     
     globalRejoin = rejoin; 
     activeClients = []; 
     
-    spawnBots(pin, name, count, autoAnswer, minDelay, maxDelay, joinDelay);
+    spawnBots(pin, name, count, autoAnswer, minDelay, maxDelay, joinDelay, smartAnswer);
     res.send({ status: "Atak rozpoczęty!" });
 });
 
@@ -39,32 +38,37 @@ app.post('/2fa', (req, res) => {
     res.send({ status: "Kod wysłany" });
 });
 
-async function spawnBots(pin, baseName, count, autoAnswer, minD, maxD, joinD) {
+// --- 3. PRZYCISK STOP (PANIC BUTTON) ---
+app.post('/stop', (req, res) => {
+    console.log("[STOP] Wyłączanie wszystkich botów...");
+    globalRejoin = false; // Blokujemy odradzanie się botów
+    activeClients.forEach(client => {
+        try { client.leave(); } catch(e) {}
+    });
+    activeClients = [];
+    res.send({ status: "Zatrzymano wszystko" });
+});
+
+async function spawnBots(pin, baseName, count, autoAnswer, minD, maxD, joinD, smart) {
     for (let i = 1; i <= count; i++) {
         const nickname = `${baseName}_${i}`;
-        createBot(pin, nickname, autoAnswer, minD, maxD, joinD);
+        createBot(pin, nickname, autoAnswer, minD, maxD, joinD, smart);
         await new Promise(r => setTimeout(r, joinD || 60));
     }
 }
 
-function createBot(pin, nickname, autoAnswer, minD, maxD, joinD) {
+function createBot(pin, nickname, autoAnswer, minD, maxD, joinD, smart) {
     const client = new Kahoot();
 
     client.join(pin, nickname).catch((err) => {
-        console.log(`[BŁĄD] Bot ${nickname} nie mógł dołączyć: ${err.description || err}`);
         if (globalRejoin) {
-            setTimeout(() => {
-                createBot(pin, nickname + "x", autoAnswer, minD, maxD, joinD);
-            }, 2500);
+            setTimeout(() => createBot(pin, nickname + "x", autoAnswer, minD, maxD, joinD, smart), 2500);
         }
     });
 
     client.on("Disconnect", (reason) => {
         if (globalRejoin) {
-            console.log(`[REJOIN] Bot ${nickname} wyrzucony (${reason}). Wraca...`);
-            setTimeout(() => {
-                createBot(pin, nickname, autoAnswer, minD, maxD, joinD);
-            }, 2500);
+            setTimeout(() => createBot(pin, nickname + "x", autoAnswer, minD, maxD, joinD, smart), 2500);
         }
     });
 
@@ -72,16 +76,18 @@ function createBot(pin, nickname, autoAnswer, minD, maxD, joinD) {
         client.on("QuestionStart", (q) => {
             const delay = Math.floor(Math.random() * (maxD - minD + 1)) + minD;
             setTimeout(() => {
-                q.answer(Math.floor(Math.random() * 4)).catch(()=>{});
+                let choice;
+                if (smart && q.quizQuestionAnswers && q.quizQuestionAnswers[q.questionIndex] !== undefined) {
+                    choice = q.quizQuestionAnswers[q.questionIndex];
+                } else {
+                    choice = Math.floor(Math.random() * 4);
+                }
+                q.answer(choice).catch(()=>{});
             }, delay);
         });
     }
-    
     activeClients.push(client);
 }
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => { 
-    console.log(`Serwer działa na porcie ${port}`); 
-});
-
+app.listen(port, () => { console.log(`Serwer działa na porcie ${port}`); });
